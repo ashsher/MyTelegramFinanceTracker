@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finance Tracker</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            color: #667eea;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .balance-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .balance-card {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .balance-card h3 {
+            font-size: 14px;
+            color: #718096;
+            margin-bottom: 5px;
+        }
+
+        .balance-card p {
+            font-size: 20px;
+            font-weight: bold;
+            color: #2d3748;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .nav-tabs button {
+            flex: 1;
+            min-width: 100px;
+            padding: 12px 20px;
+            border: none;
+            background: white;
+            color: #667eea;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .nav-tabs button.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #4a5568;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .expense-item {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .expense-info {
+            flex: 1;
+        }
+
+        .expense-amount {
+            font-size: 20px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .expense-category {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-right: 8px;
+        }
+
+        .expense-source {
+            color: #718096;
+            font-size: 14px;
+        }
+
+        .expense-note {
+            color: #4a5568;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .expense-date {
+            font-size: 12px;
+            color: #a0aec0;
+        }
+
+        .delete-btn {
+            background: #f56565;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .source-item {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .source-info h3 {
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .source-balance {
+            font-size: 20px;
+            font-weight: bold;
+            color: #48bb78;
+        }
+
+        .source-type {
+            font-size: 12px;
+            color: #718096;
+            text-transform: uppercase;
+        }
+
+        .low-balance {
+            color: #f56565 !important;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 20px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #718096;
+        }
+
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+
+        .category-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .category-btn {
+            padding: 15px;
+            border: 2px solid #e2e8f0;
+            background: white;
+            border-radius: 10px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .category-btn.selected {
+            border-color: #667eea;
+            background: #667eea;
+            color: white;
+        }
+
+        .category-icon {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .category-name {
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .spinner {
+            border: 3px solid #e2e8f0;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>💰 Finance Tracker</h1>
+            <p style="color: #718096;">Track your expenses smartly</p>
+            <div class="balance-summary" id="balanceSummary">
+                <div class="balance-card">
+                    <h3>Total Balance</h3>
+                    <p id="totalBalance">$0.00</p>
+                </div>
+                <div class="balance-card">
+                    <h3>This Month</h3>
+                    <p id="monthlySpent">$0.00</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="nav-tabs">
+            <button class="active" onclick="showTab('add')">➕ Add</button>
+            <button onclick="showTab('expenses')">📋 Expenses</button>
+            <button onclick="showTab('sources')">💳 Sources</button>
+            <button onclick="showTab('stats')">📊 Stats</button>
+        </div>
+
+        <!-- Add Expense Tab -->
+        <div id="add" class="tab-content active">
+            <div class="card">
+                <h2 style="margin-bottom: 20px;">Add New Expense</h2>
+                <form id="expenseForm">
+                    <div class="form-group">
+                        <label>Category</label>
+                        <div class="category-grid" id="categoryGrid"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Amount</label>
+                        <input type="number" id="amount" step="0.01" required placeholder="0.00">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Payment Source</label>
+                        <select id="source" required>
+                            <option value="">Select source...</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Note (Optional)</label>
+                        <textarea id="note" rows="3" placeholder="Add a note..."></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Add Expense</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Expenses Tab -->
+        <div id="expenses" class="tab-content">
+            <div class="card">
+                <h2 style="margin-bottom: 20px;">Recent Expenses</h2>
+                <div id="expensesList"></div>
+            </div>
+        </div>
+
+        <!-- Sources Tab -->
+        <div id="sources" class="tab-content">
+            <div class="card">
+                <h2 style="margin-bottom: 20px;">Money Sources</h2>
+                <div id="sourcesList"></div>
+            </div>
+
+            <div class="card">
+                <h2 style="margin-bottom: 20px;">Add New Source</h2>
+                <form id="sourceForm">
+                    <div class="form-group">
+                        <label>Source Name</label>
+                        <input type="text" id="sourceName" required placeholder="e.g., Credit Card 1">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Type</label>
+                        <select id="sourceType" required>
+                            <option value="cash">💵 Cash</option>
+                            <option value="card">💳 Credit/Debit Card</option>
+                            <option value="paypal">🅿️ PayPal</option>
+                            <option value="bank">🏦 Bank Account</option>
+                            <option value="other">📦 Other</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Initial Balance</label>
+                        <input type="number" id="sourceBalance" step="0.01" required placeholder="0.00">
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Add Source</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Statistics Tab -->
+        <div id="stats" class="tab-content">
+            <div class="card">
+                <h2 style="margin-bottom: 20px;">Monthly Spending by Category</h2>
+                <div class="chart-container">
+                    <canvas id="monthlyChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 style="margin-bottom: 20px;">Weekly Spending Trend</h2>
+                <div class="chart-container">
+                    <canvas id="weeklyChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_URL = window.location.origin + '/api';
+        const tg = window.Telegram.WebApp;
+        let userId = null;
+        let selectedCategory = '';
+
+        const categories = [
+            { name: 'Food', icon: '🍔' },
+            { name: 'Transport', icon: '🚗' },
+            { name: 'Shopping', icon: '🛍️' },
+            { name: 'Bills', icon: '💡' },
+            { name: 'Entertainment', icon: '🎬' },
+            { name: 'Health', icon: '💊' },
+            { name: 'Lend', icon: '🤝' },
+            { name: 'Other', icon: '📦' }
+        ];
+
+        // Initialize
+        async function init() {
+            tg.ready();
+            tg.expand();
+            
+            // Get user info from Telegram
+            const user = tg.initDataUnsafe?.user;
+            if (user) {
+                userId = user.id;
+                await initUser(user.id, user.username);
+            } else {
+                // For testing outside Telegram
+                userId = 123456789;
+                await initUser(userId, 'testuser');
+            }
+
+            renderCategoryGrid();
+            await loadSources();
+            await loadExpenses();
+            await loadBalance();
+            await loadStatistics();
+        }
+
+        async function initUser(telegramId, username) {
+            try {
+                await fetch(`${API_URL}/init`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telegram_id: telegramId, username })
+                });
+            } catch (error) {
+                console.error('Error initializing user:', error);
+            }
+        }
+
+        function renderCategoryGrid() {
+            const grid = document.getElementById('categoryGrid');
+            grid.innerHTML = categories.map(cat => `
+                <div class="category-btn" onclick="selectCategory('${cat.name}')">
+                    <div class="category-icon">${cat.icon}</div>
+                    <div class="category-name">${cat.name}</div>
+                </div>
+            `).join('');
+        }
+
+        function selectCategory(category) {
+            selectedCategory = category;
+            document.querySelectorAll('.category-btn').forEach(btn => {
+                btn.classList.remove('selected');
+                if (btn.textContent.includes(category)) {
+                    btn.classList.add('selected');
+                }
+            });
+        }
+
+        async function loadSources() {
+            try {
+                const response = await fetch(`${API_URL}/sources?telegram_id=${userId}`);
+                const sources = await response.json();
+                
+                // Update source dropdown
+                const select = document.getElementById('source');
+                select.innerHTML = '<option value="">Select source...</option>' + 
+                    sources.map(s => `
+                        <option value="${s.id}">${s.name} - $${s.balance.toFixed(2)}</option>
+                    `).join('');
+
+                // Update sources list
+                const list = document.getElementById('sourcesList');
+                if (sources.length === 0) {
+                    list.innerHTML = '<div class="empty-state">No sources added yet. Add your first source below!</div>';
+                } else {
+                    list.innerHTML = sources.map(s => `
+                        <div class="source-item">
+                            <div class="source-info">
+                                <h3>${s.name}</h3>
+                                <div class="source-type">${s.type}</div>
+                                <div class="source-balance ${s.balance < 100 ? 'low-balance' : ''}">
+                                    $${s.balance.toFixed(2)}
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error loading sources:', error);
+            }
+        }
+
+        async function loadExpenses() {
+            try {
+                const response = await fetch(`${API_URL}/expenses?telegram_id=${userId}&limit=50`);
+                const expenses = await response.json();
+                
+                const list = document.getElementById('expensesList');
+                if (expenses.length === 0) {
+                    list.innerHTML = '<div class="empty-state">No expenses yet. Add your first expense!</div>';
+                } else {
+                    list.innerHTML = expenses.map(e => {
+                        const date = new Date(e.created_at).toLocaleDateString();
+                        const categoryIcon = categories.find(c => c.name === e.category)?.icon || '📦';
+                        return `
+                            <div class="expense-item">
+                                <div class="expense-info">
+                                    <div class="expense-amount">-$${e.amount.toFixed(2)}</div>
+                                    <div>
+                                        <span class="expense-category">${categoryIcon} ${e.category}</span>
+                                        <span class="expense-source">via ${e.source_name}</span>
+                                    </div>
+                                    ${e.note ? `<div class="expense-note">${e.note}</div>` : ''}
+                                    <div class="expense-date">${date}</div>
+                                </div>
+                                <button class="delete-btn" onclick="deleteExpense(${e.id})">Delete</button>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            } catch (error) {
+                console.error('Error loading expenses:', error);
+            }
+        }
+
+        async function loadBalance() {
+            try {
+                const [sourcesRes, statsRes] = await Promise.all([
+                    fetch(`${API_URL}/sources?telegram_id=${userId}`),
+                    fetch(`${API_URL}/statistics/monthly?telegram_id=${userId}`)
+                ]);
+
+                const sources = await sourcesRes.json();
+                const stats = await statsRes.json();
+
+                const totalBalance = sources.reduce((sum, s) => sum + s.balance, 0);
+                
+                document.getElementById('totalBalance').textContent = `$${totalBalance.toFixed(2)}`;
+                document.getElementById('monthlySpent').textContent = `-$${stats.total.toFixed(2)}`;
+            } catch (error) {
+                console.error('Error loading balance:', error);
+            }
+        }
+
+        async function loadStatistics() {
+            try {
+                const [monthlyRes, weeklyRes] = await Promise.all([
+                    fetch(`${API_URL}/statistics/monthly?telegram_id=${userId}`),
+                    fetch(`${API_URL}/statistics/weekly?telegram_id=${userId}`)
+                ]);
+
+                const monthly = await monthlyRes.json();
+                const weekly = await weeklyRes.json();
+
+                renderMonthlyChart(monthly.categories);
+                renderWeeklyChart(weekly.daily);
+            } catch (error) {
+                console.error('Error loading statistics:', error);
+            }
+        }
+
+        function renderMonthlyChart(categories) {
+            const ctx = document.getElementById('monthlyChart').getContext('2d');
+            
+            if (window.monthlyChartInstance) {
+                window.monthlyChartInstance.destroy();
+            }
+
+            window.monthlyChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: categories.map(c => c.category),
+                    datasets: [{
+                        data: categories.map(c => c.total),
+                        backgroundColor: [
+                            '#667eea', '#764ba2', '#f093fb', '#4facfe',
+                            '#43e97b', '#fa709a', '#feca57'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderWeeklyChart(daily) {
+            const ctx = document.getElementById('weeklyChart').getContext('2d');
+            
+            if (window.weeklyChartInstance) {
+                window.weeklyChartInstance.destroy();
+            }
+
+            // Fill in missing days with 0
+            const last7Days = [];
+            for (let i = 6; i >= 0; i--) {
+                const date = new Date();
+                date.setDate(date.getDate() - i);
+                const dateStr = date.toISOString().split('T')[0];
+                const dayData = daily.find(d => d.date === dateStr);
+                last7Days.push({
+                    date: date.toLocaleDateString('en-US', { weekday: 'short' }),
+                    total: dayData ? dayData.total : 0
+                });
+            }
+
+            window.weeklyChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: last7Days.map(d => d.date),
+                    datasets: [{
+                        label: 'Daily Spending',
+                        data: last7Days.map(d => d.total),
+                        backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                        borderColor: '#667eea',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+
+        // Event Listeners
+        document.getElementById('expenseForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (!selectedCategory) {
+                tg.showAlert('Please select a category');
+                return;
+            }
+
+            const amount = parseFloat(document.getElementById('amount').value);
+            const sourceId = parseInt(document.getElementById('source').value);
+            const note = document.getElementById('note').value;
+
+            try {
+                const response = await fetch(`${API_URL}/expenses`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        telegram_id: userId,
+                        source_id: sourceId,
+                        amount,
+                        category: selectedCategory,
+                        note
+                    })
+                });
+
+                if (response.ok) {
+                    tg.showAlert('Expense added successfully!');
+                    document.getElementById('expenseForm').reset();
+                    selectedCategory = '';
+                    document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('selected'));
+                    await loadExpenses();
+                    await loadSources();
+                    await loadBalance();
+                    await loadStatistics();
+                } else {
+                    const error = await response.json();
+                    tg.showAlert(error.error || 'Failed to add expense');
+                }
+            } catch (error) {
+                tg.showAlert('Error adding expense');
+                console.error(error);
+            }
+        });
+
+        document.getElementById('sourceForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const name = document.getElementById('sourceName').value;
+            const type = document.getElementById('sourceType').value;
+            const balance = parseFloat(document.getElementById('sourceBalance').value);
+
+            try {
+                const response = await fetch(`${API_URL}/sources`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        telegram_id: userId,
+                        name,
+                        type,
+                        balance
+                    })
+                });
+
+                if (response.ok) {
+                    tg.showAlert('Source added successfully!');
+                    document.getElementById('sourceForm').reset();
+                    await loadSources();
+                    await loadBalance();
+                } else {
+                    tg.showAlert('Failed to add source');
+                }
+            } catch (error) {
+                tg.showAlert('Error adding source');
+                console.error(error);
+            }
+        });
+
+        async function deleteExpense(id) {
+            if (!confirm('Delete this expense?')) return;
+
+            try {
+                const response = await fetch(`${API_URL}/expenses/${id}?telegram_id=${userId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    await loadExpenses();
+                    await loadSources();
+                    await loadBalance();
+                    await loadStatistics();
+                    tg.showAlert('Expense deleted!');
+                }
+            } catch (error) {
+                tg.showAlert('Error deleting expense');
+                console.error(error);
+            }
+        }
+
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.nav-tabs button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+
+            if (tabName === 'stats') {
+                loadStatistics();
+            }
+        }
+
+        // Initialize app
+        init();
+    </script>
+</body>
+</html>
