@@ -287,9 +287,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 👨‍💻 Author
 
 **Your Name**
-- GitHub: [@yourusername](https://github.com/yourusername)
-- LinkedIn: [Your Name](https://linkedin.com/in/yourname)
-- Telegram: @yourusername
+- Telegram: @ashsher
 
 ## 🙏 Acknowledgments
 
@@ -304,7 +302,7 @@ If you have any questions or issues:
 1. Check the [Deployment Guide](DEPLOYMENT.md)
 2. Review [Troubleshooting](#troubleshooting) section
 3. Open an issue on GitHub
-4. Contact via Telegram: @yourusername
+4. Contact via Telegram: @ashsher
 
 ---
 
