@@ -1,79 +1,156 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-import sqlite3
-from datetime import datetime, timedelta
 import os
 
 app = Flask(__name__, static_folder='static')
 CORS(app)
 
-DATABASE = 'finance.db'
+# Database configuration
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
-# Initialize database
-def init_db():
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
+# Use PostgreSQL (Supabase) or SQLite for local development
+if DATABASE_URL and DATABASE_URL.startswith('postgres'):
+    # PostgreSQL connection (Supabase)
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
     
-    # Users table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            telegram_id INTEGER UNIQUE NOT NULL,
-            username TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
+    def get_db():
+        conn = psycopg2.connect(DATABASE_URL)
+        conn.cursor_factory = RealDictCursor
+        return conn
     
-    # Money sources table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS money_sources (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            balance REAL DEFAULT 0,
-            type TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-    ''')
+    def init_db():
+        """Initialize PostgreSQL tables"""
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Users table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id BIGSERIAL PRIMARY KEY,
+                telegram_id BIGINT UNIQUE NOT NULL,
+                username TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Money sources table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS money_sources (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                name TEXT NOT NULL,
+                balance NUMERIC(12,2) DEFAULT 0,
+                type TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        ''')
+        
+        # Expenses table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS expenses (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                source_id BIGINT NOT NULL,
+                amount NUMERIC(12,2) NOT NULL,
+                category TEXT NOT NULL,
+                note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id),
+                FOREIGN KEY (source_id) REFERENCES money_sources (id)
+            )
+        ''')
+        
+        # Create indexes for better performance
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_expenses_user_id ON expenses(user_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_expenses_created_at ON expenses(created_at)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_sources_user_id ON money_sources(user_id)')
+        
+        conn.commit()
+        conn.close()
+else:
+    # SQLite for local development
+    import sqlite3
     
-    # Expenses table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS expenses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            source_id INTEGER NOT NULL,
-            amount REAL NOT NULL,
-            category TEXT NOT NULL,
-            note TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id),
-            FOREIGN KEY (source_id) REFERENCES money_sources (id)
-        )
-    ''')
+    DATABASE = 'finance.db'
     
-    conn.commit()
-    conn.close()
+    def get_db():
+        conn = sqlite3.connect(DATABASE)
+        conn.row_factory = sqlite3.Row
+        return conn
+    
+    def init_db():
+        """Initialize SQLite tables"""
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Users table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                telegram_id INTEGER UNIQUE NOT NULL,
+                username TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Money sources table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS money_sources (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                balance REAL DEFAULT 0,
+                type TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        ''')
+        
+        # Expenses table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS expenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                source_id INTEGER NOT NULL,
+                amount REAL NOT NULL,
+                category TEXT NOT NULL,
+                note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id),
+                FOREIGN KEY (source_id) REFERENCES money_sources (id)
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
 
-# Get database connection
-def get_db():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
+# Helper function to convert Row/RealDictRow to dict
+def row_to_dict(row):
+    """Convert database row to dictionary"""
+    if row is None:
+        return None
+    if isinstance(row, dict):
+        return row
+    return dict(row)
 
 # Create or get user
 def get_or_create_user(telegram_id, username=None):
     conn = get_db()
     cursor = conn.cursor()
     
-    cursor.execute('SELECT * FROM users WHERE telegram_id = ?', (telegram_id,))
+    cursor.execute('SELECT * FROM users WHERE telegram_id = %s' if DATABASE_URL else 'SELECT * FROM users WHERE telegram_id = ?', (telegram_id,))
     user = cursor.fetchone()
     
     if not user:
-        cursor.execute('INSERT INTO users (telegram_id, username) VALUES (?, ?)',
+        cursor.execute('INSERT INTO users (telegram_id, username) VALUES (%s, %s) RETURNING id' if DATABASE_URL else 'INSERT INTO users (telegram_id, username) VALUES (?, ?)',
                       (telegram_id, username))
         conn.commit()
-        user_id = cursor.lastrowid
+        if DATABASE_URL:
+            user_id = cursor.fetchone()['id']
+        else:
+            user_id = cursor.lastrowid
     else:
         user_id = user['id']
     
@@ -109,13 +186,10 @@ def get_sources():
     
     user_id = get_or_create_user(telegram_id)
     
-    cursor.execute('''
-        SELECT * FROM money_sources 
-        WHERE user_id = ? 
-        ORDER BY created_at DESC
-    ''', (user_id,))
+    query = 'SELECT * FROM money_sources WHERE user_id = %s ORDER BY created_at DESC' if DATABASE_URL else 'SELECT * FROM money_sources WHERE user_id = ? ORDER BY created_at DESC'
+    cursor.execute(query, (user_id,))
     
-    sources = [dict(row) for row in cursor.fetchall()]
+    sources = [row_to_dict(row) for row in cursor.fetchall()]
     conn.close()
     
     return jsonify(sources)
@@ -136,13 +210,16 @@ def add_source():
     
     user_id = get_or_create_user(telegram_id)
     
-    cursor.execute('''
-        INSERT INTO money_sources (user_id, name, balance, type)
-        VALUES (?, ?, ?, ?)
-    ''', (user_id, name, balance, source_type))
+    query = 'INSERT INTO money_sources (user_id, name, balance, type) VALUES (%s, %s, %s, %s) RETURNING id' if DATABASE_URL else 'INSERT INTO money_sources (user_id, name, balance, type) VALUES (?, ?, ?, ?)'
+    cursor.execute(query, (user_id, name, balance, source_type))
     
     conn.commit()
-    source_id = cursor.lastrowid
+    
+    if DATABASE_URL:
+        source_id = cursor.fetchone()['id']
+    else:
+        source_id = cursor.lastrowid
+    
     conn.close()
     
     return jsonify({
@@ -164,11 +241,8 @@ def update_source(source_id):
     
     user_id = get_or_create_user(telegram_id)
     
-    cursor.execute('''
-        UPDATE money_sources 
-        SET balance = ? 
-        WHERE id = ? AND user_id = ?
-    ''', (balance, source_id, user_id))
+    query = 'UPDATE money_sources SET balance = %s WHERE id = %s AND user_id = %s' if DATABASE_URL else 'UPDATE money_sources SET balance = ? WHERE id = ? AND user_id = ?'
+    cursor.execute(query, (balance, source_id, user_id))
     
     conn.commit()
     conn.close()
@@ -187,10 +261,18 @@ def delete_source(source_id):
     
     user_id = get_or_create_user(telegram_id)
     
-    cursor.execute('''
-        DELETE FROM money_sources 
-        WHERE id = ? AND user_id = ?
-    ''', (source_id, user_id))
+    # Check if source has any expenses
+    query = 'SELECT COUNT(*) as count FROM expenses WHERE source_id = %s AND user_id = %s' if DATABASE_URL else 'SELECT COUNT(*) as count FROM expenses WHERE source_id = ? AND user_id = ?'
+    cursor.execute(query, (source_id, user_id))
+    
+    expense_count = cursor.fetchone()['count']
+    
+    if expense_count > 0:
+        conn.close()
+        return jsonify({'error': f'Cannot delete source with {expense_count} expenses. Delete expenses first.'}), 400
+    
+    query = 'DELETE FROM money_sources WHERE id = %s AND user_id = %s' if DATABASE_URL else 'DELETE FROM money_sources WHERE id = ? AND user_id = ?'
+    cursor.execute(query, (source_id, user_id))
     
     conn.commit()
     conn.close()
@@ -211,16 +293,25 @@ def get_expenses():
     
     user_id = get_or_create_user(telegram_id)
     
-    cursor.execute('''
+    query = '''
+        SELECT e.*, ms.name as source_name, ms.type as source_type
+        FROM expenses e
+        JOIN money_sources ms ON e.source_id = ms.id
+        WHERE e.user_id = %s
+        ORDER BY e.created_at DESC
+        LIMIT %s
+    ''' if DATABASE_URL else '''
         SELECT e.*, ms.name as source_name, ms.type as source_type
         FROM expenses e
         JOIN money_sources ms ON e.source_id = ms.id
         WHERE e.user_id = ?
         ORDER BY e.created_at DESC
         LIMIT ?
-    ''', (user_id, limit))
+    '''
     
-    expenses = [dict(row) for row in cursor.fetchall()]
+    cursor.execute(query, (user_id, limit))
+    
+    expenses = [row_to_dict(row) for row in cursor.fetchall()]
     conn.close()
     
     return jsonify(expenses)
@@ -243,33 +334,33 @@ def add_expense():
     user_id = get_or_create_user(telegram_id)
     
     # Check if source exists and has enough balance
-    cursor.execute('SELECT balance FROM money_sources WHERE id = ? AND user_id = ?',
-                  (source_id, user_id))
+    query = 'SELECT balance FROM money_sources WHERE id = %s AND user_id = %s' if DATABASE_URL else 'SELECT balance FROM money_sources WHERE id = ? AND user_id = ?'
+    cursor.execute(query, (source_id, user_id))
     source = cursor.fetchone()
     
     if not source:
         conn.close()
         return jsonify({'error': 'Source not found'}), 404
     
-    if source['balance'] < amount:
+    if float(source['balance']) < float(amount):
         conn.close()
         return jsonify({'error': 'Insufficient balance'}), 400
     
     # Add expense
-    cursor.execute('''
-        INSERT INTO expenses (user_id, source_id, amount, category, note)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (user_id, source_id, amount, category, note))
+    query = 'INSERT INTO expenses (user_id, source_id, amount, category, note) VALUES (%s, %s, %s, %s, %s) RETURNING id' if DATABASE_URL else 'INSERT INTO expenses (user_id, source_id, amount, category, note) VALUES (?, ?, ?, ?, ?)'
+    cursor.execute(query, (user_id, source_id, amount, category, note))
     
     # Update source balance
-    cursor.execute('''
-        UPDATE money_sources 
-        SET balance = balance - ? 
-        WHERE id = ?
-    ''', (amount, source_id))
+    query = 'UPDATE money_sources SET balance = balance - %s WHERE id = %s' if DATABASE_URL else 'UPDATE money_sources SET balance = balance - ? WHERE id = ?'
+    cursor.execute(query, (amount, source_id))
     
     conn.commit()
-    expense_id = cursor.lastrowid
+    
+    if DATABASE_URL:
+        expense_id = cursor.fetchone()['id']
+    else:
+        expense_id = cursor.lastrowid
+    
     conn.close()
     
     return jsonify({
@@ -290,10 +381,8 @@ def delete_expense(expense_id):
     user_id = get_or_create_user(telegram_id)
     
     # Get expense details before deleting
-    cursor.execute('''
-        SELECT amount, source_id FROM expenses 
-        WHERE id = ? AND user_id = ?
-    ''', (expense_id, user_id))
+    query = 'SELECT amount, source_id FROM expenses WHERE id = %s AND user_id = %s' if DATABASE_URL else 'SELECT amount, source_id FROM expenses WHERE id = ? AND user_id = ?'
+    cursor.execute(query, (expense_id, user_id))
     
     expense = cursor.fetchone()
     
@@ -302,15 +391,12 @@ def delete_expense(expense_id):
         return jsonify({'error': 'Expense not found'}), 404
     
     # Restore balance to source
-    cursor.execute('''
-        UPDATE money_sources 
-        SET balance = balance + ? 
-        WHERE id = ?
-    ''', (expense['amount'], expense['source_id']))
+    query = 'UPDATE money_sources SET balance = balance + %s WHERE id = %s' if DATABASE_URL else 'UPDATE money_sources SET balance = balance + ? WHERE id = ?'
+    cursor.execute(query, (expense['amount'], expense['source_id']))
     
     # Delete expense
-    cursor.execute('DELETE FROM expenses WHERE id = ? AND user_id = ?',
-                  (expense_id, user_id))
+    query = 'DELETE FROM expenses WHERE id = %s AND user_id = %s' if DATABASE_URL else 'DELETE FROM expenses WHERE id = ? AND user_id = ?'
+    cursor.execute(query, (expense_id, user_id))
     
     conn.commit()
     conn.close()
@@ -331,32 +417,52 @@ def get_monthly_statistics():
     user_id = get_or_create_user(telegram_id)
     
     # Get current month's expenses by category
-    cursor.execute('''
-        SELECT category, SUM(amount) as total
-        FROM expenses
-        WHERE user_id = ? 
-        AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
-        GROUP BY category
-        ORDER BY total DESC
-    ''', (user_id,))
+    if DATABASE_URL:
+        query = '''
+            SELECT category, SUM(amount) as total
+            FROM expenses
+            WHERE user_id = %s 
+            AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
+            GROUP BY category
+            ORDER BY total DESC
+        '''
+    else:
+        query = '''
+            SELECT category, SUM(amount) as total
+            FROM expenses
+            WHERE user_id = ? 
+            AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+            GROUP BY category
+            ORDER BY total DESC
+        '''
     
-    categories = [dict(row) for row in cursor.fetchall()]
+    cursor.execute(query, (user_id,))
+    categories = [row_to_dict(row) for row in cursor.fetchall()]
     
     # Get total for current month
-    cursor.execute('''
-        SELECT SUM(amount) as total
-        FROM expenses
-        WHERE user_id = ? 
-        AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
-    ''', (user_id,))
+    if DATABASE_URL:
+        query = '''
+            SELECT SUM(amount) as total
+            FROM expenses
+            WHERE user_id = %s 
+            AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
+        '''
+    else:
+        query = '''
+            SELECT SUM(amount) as total
+            FROM expenses
+            WHERE user_id = ? 
+            AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+        '''
     
+    cursor.execute(query, (user_id,))
     total = cursor.fetchone()['total'] or 0
     
     conn.close()
     
     return jsonify({
         'categories': categories,
-        'total': total
+        'total': float(total)
     })
 
 @app.route('/api/statistics/weekly', methods=['GET'])
@@ -372,16 +478,27 @@ def get_weekly_statistics():
     user_id = get_or_create_user(telegram_id)
     
     # Get last 7 days expenses
-    cursor.execute('''
-        SELECT DATE(created_at) as date, SUM(amount) as total
-        FROM expenses
-        WHERE user_id = ? 
-        AND created_at >= date('now', '-7 days')
-        GROUP BY DATE(created_at)
-        ORDER BY date ASC
-    ''', (user_id,))
+    if DATABASE_URL:
+        query = '''
+            SELECT DATE(created_at) as date, SUM(amount) as total
+            FROM expenses
+            WHERE user_id = %s 
+            AND created_at >= CURRENT_DATE - INTERVAL '7 days'
+            GROUP BY DATE(created_at)
+            ORDER BY date ASC
+        '''
+    else:
+        query = '''
+            SELECT DATE(created_at) as date, SUM(amount) as total
+            FROM expenses
+            WHERE user_id = ? 
+            AND created_at >= date('now', '-7 days')
+            GROUP BY DATE(created_at)
+            ORDER BY date ASC
+        '''
     
-    daily = [dict(row) for row in cursor.fetchall()]
+    cursor.execute(query, (user_id,))
+    daily = [row_to_dict(row) for row in cursor.fetchall()]
     conn.close()
     
     return jsonify({'daily': daily})
@@ -399,16 +516,24 @@ def get_source_statistics():
     user_id = get_or_create_user(telegram_id)
     
     # Get spending by source
-    cursor.execute('''
+    query = '''
+        SELECT ms.name, ms.balance, SUM(e.amount) as spent
+        FROM money_sources ms
+        LEFT JOIN expenses e ON ms.id = e.source_id
+        WHERE ms.user_id = %s
+        GROUP BY ms.id, ms.name, ms.balance
+        ORDER BY spent DESC
+    ''' if DATABASE_URL else '''
         SELECT ms.name, ms.balance, SUM(e.amount) as spent
         FROM money_sources ms
         LEFT JOIN expenses e ON ms.id = e.source_id
         WHERE ms.user_id = ?
         GROUP BY ms.id
         ORDER BY spent DESC
-    ''', (user_id,))
+    '''
     
-    sources = [dict(row) for row in cursor.fetchall()]
+    cursor.execute(query, (user_id,))
+    sources = [row_to_dict(row) for row in cursor.fetchall()]
     conn.close()
     
     return jsonify({'sources': sources})
