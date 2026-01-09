@@ -7,6 +7,12 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        :root {
+            --daddy-color: green;
+            --mommy-color: rgb(76, 145, 76);
+            --sonny-color: #2d3748;
+        }
+        
         * {
             margin: 0;
             padding: 0;
@@ -15,7 +21,7 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--daddy-color);
             padding: 20px;
             min-height: 100vh;
         }
@@ -34,7 +40,7 @@
         }
 
         .header h1 {
-            color: #667eea;
+            color: var(--daddy-color);
             font-size: 24px;
             margin-bottom: 10px;
         }
@@ -50,19 +56,19 @@
             background: #f7fafc;
             padding: 15px;
             border-radius: 10px;
-            border-left: 4px solid #667eea;
+            border-left: 4px solid var(--daddy-color);
         }
 
         .balance-card h3 {
             font-size: 14px;
-            color: #718096;
+            color: var(--mommy-color);
             margin-bottom: 5px;
         }
 
         .balance-card p {
             font-size: 20px;
             font-weight: bold;
-            color: #2d3748;
+            color: var(--sonny-color);
         }
 
         .nav-tabs {
@@ -78,7 +84,7 @@
             padding: 12px 20px;
             border: none;
             background: white;
-            color: #667eea;
+            color: var(--mommy-color);
             border-radius: 10px;
             cursor: pointer;
             font-weight: 600;
@@ -87,7 +93,7 @@
         }
 
         .nav-tabs button.active {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--mommy-color);
             color: white;
         }
 
@@ -114,7 +120,7 @@
         .form-group label {
             display: block;
             margin-bottom: 5px;
-            color: #4a5568;
+            color: var(--sonny-color);
             font-weight: 600;
             font-size: 14px;
         }
@@ -134,7 +140,7 @@
         .form-group select:focus,
         .form-group textarea:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--mommy-color);
         }
 
         .btn {
@@ -149,7 +155,7 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--mommy-color);
             color: white;
         }
 
@@ -180,13 +186,13 @@
         .expense-amount {
             font-size: 20px;
             font-weight: bold;
-            color: #667eea;
+            color: var(--mommy-color);
             margin-bottom: 5px;
         }
 
         .expense-category {
             display: inline-block;
-            background: #667eea;
+            background: var(--mommy-color);
             color: white;
             padding: 4px 12px;
             border-radius: 20px;
@@ -288,8 +294,8 @@
         }
 
         .category-btn.selected {
-            border-color: #667eea;
-            background: #667eea;
+            border-color: var(--daddy-color);
+            background: var(--mommy-color);
             color: white;
         }
 
@@ -306,7 +312,7 @@
         .loading {
             text-align: center;
             padding: 20px;
-            color: #667eea;
+            color: var(--daddy-color);
         }
 
         @keyframes spin {
@@ -315,7 +321,7 @@
 
         .spinner {
             border: 3px solid #e2e8f0;
-            border-top: 3px solid #667eea;
+            border-top: 3px solid var(--daddy-color);
             border-radius: 50%;
             width: 40px;
             height: 40px;
@@ -327,7 +333,11 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>💰 Finance Tracker</h1>
+            <h1>
+                <img src="/static/images/logo.png" alt="Logo" 
+                    style="width: 30px;; border-radius: 5px;"> 
+                Finance Tracker
+            </h1>
             <p style="color: #718096;">Track your expenses smartly</p>
             <div class="balance-summary" id="balanceSummary">
                 <div class="balance-card">
@@ -360,7 +370,7 @@
                     
                     <div class="form-group">
                         <label>Amount</label>
-                        <input type="number" id="amount" step="0.01" required placeholder="0.00">
+                        <input type="number" id="amount" step="1" required placeholder="0">
                     </div>
 
                     <div class="form-group">
@@ -446,18 +456,27 @@
         // Configuration
         const API_URL = window.location.origin + '/api';
         const CURRENCY = 'UZS'; // Change currency here
-        const CURRENCY_SYMBOL = 'so\'m'; // Change symbol here
+        const CURRENCY_SYMBOL = 'UZS'; // Change symbol here
         const tg = window.Telegram.WebApp;
         let userId = null;
         let selectedCategory = '';
 
         const categories = [
             { name: 'Food', icon: '🍔' },
+            { name: 'Groceries', icon: '🍅' },
             { name: 'Transport', icon: '🚗' },
             { name: 'Shopping', icon: '🛍️' },
-            { name: 'Bills', icon: '💡' },
+            { name: 'Subscription', icon: '💡' },
+            { name: 'Salary', icon: '🤑' },
             { name: 'Entertainment', icon: '🎬' },
             { name: 'Health', icon: '💊' },
+            { name: 'Household', icon: '🏚️' },
+            { name: 'Education', icon: '📚' },
+            { name: 'Travel', icon: '✈️' },
+            { name: 'Savings', icon: '💰' },
+            { name: 'Exchange', icon: '💱' },
+            { name: 'Lend', icon: '🤝' },
+            { name: 'Donation', icon: '🩸' },
             { name: 'Other', icon: '📦' }
         ];
 
