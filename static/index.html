@@ -19,16 +19,24 @@
             box-sizing: border-box;
         }
 
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow-x: hidden;
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background: var(--daddy-color);
-            padding: 20px;
             min-height: 100vh;
+            min-height: -webkit-fill-available;
         }
 
         .container {
             max-width: 600px;
             margin: 0 auto;
+            padding: 0; /* Remove padding for full width */
+            min-height: 100vh;
         }
 
         .header {
@@ -426,7 +434,7 @@
 
                     <div class="form-group">
                         <label>Initial Balance</label>
-                        <input type="number" id="sourceBalance" step="0.01" required placeholder="0.00">
+                        <input type="number" id="sourceBalance" step="1" required placeholder="0">
                     </div>
 
                     <button type="submit" class="btn btn-primary">Add Source</button>
@@ -453,11 +461,25 @@
     </div>
 
     <script>
+        // Telegram Web App initialization
+        const tg = window.Telegram.WebApp;
+
+        // Configure web app
+        tg.ready();
+        tg.expand(); // Expand to full height
+
+        // Enable fullscreen
+        tg.enableClosingConfirmation();
+        tg.setHeaderColor('#667eea'); // Match your theme
+        tg.setBackgroundColor('#667eea');
+
+        // Prevent swipe to close
+        tg.disableVerticalSwipes();
+
         // Configuration
         const API_URL = window.location.origin + '/api';
         const CURRENCY = 'UZS'; // Change currency here
         const CURRENCY_SYMBOL = 'UZS'; // Change symbol here
-        const tg = window.Telegram.WebApp;
         let userId = null;
         let selectedCategory = '';
 
@@ -482,26 +504,62 @@
 
         // Initialize
         async function init() {
+            // Prevent multiple initializations
+            if (window.appInitialized) return;
+            window.appInitialized = true;
+            
+            // Configure Telegram Web App
             tg.ready();
             tg.expand();
+            tg.enableClosingConfirmation();
             
-            // Get user info from Telegram
-            const user = tg.initDataUnsafe?.user;
-            if (user) {
-                userId = user.id;
-                await initUser(user.id, user.username);
-            } else {
-                // For testing outside Telegram
-                userId = 123456789;
-                await initUser(userId, 'testuser');
-            }
+            try {
+                showLoading();
+                
+                // Initialize language (cached)
+                await initLanguage();
+                
+                // Get user info
+                const user = tg.initDataUnsafe?.user;
+                userId = user ? user.id : 123456789;
+                
+                if (user) {
+                    await initUser(user.id, user.username);
+                } else {
+                    await initUser(userId, 'testuser');
+                }
 
-            renderCategoryGrid();
-            await loadSources();
-            await loadExpenses();
-            await loadBalance();
-            await loadStatistics();
+                // Render UI components
+                renderCategoryGrid();
+                
+                // Load only essential data
+                await Promise.all([
+                    loadBalance(),
+                    loadSources()
+                ]);
+                
+                hideLoading();
+                
+                // Set up visibility change handler
+                document.addEventListener('visibilitychange', handleVisibilityChange);
+                
+            } catch (error) {
+                console.error('Initialization error:', error);
+                hideLoading();
+                tg.showAlert('Error loading app. Please try again.');
+            }
         }
+
+        function handleVisibilityChange() {
+            if (document.visibilityState === 'visible') {
+                // Refresh only if cache expired (30 seconds)
+                if (!isCacheValid('balance')) {
+                    loadBalance();
+                }
+            }
+        }
+
+        // Initialize app
 
         async function initUser(telegramId, username) {
             try {
@@ -613,20 +671,36 @@
                 const sources = await sourcesRes.json();
                 const stats = await statsRes.json();
 
-                const totalBalance = sources.reduce((sum, s) => sum + s.balance, 0);
+                // Ensure we're working with numbers
+                const totalBalance = sources.reduce((sum, s) => sum + Number(s.balance || 0), 0);
+                const monthlyTotal = Number(stats.total || 0);
                 
                 document.getElementById('totalBalance').textContent = formatCurrency(totalBalance);
-                document.getElementById('monthlySpent').textContent = `-${formatCurrency(stats.total)}`;
+                document.getElementById('monthlySpent').textContent = `-${formatCurrency(monthlyTotal)}`;
             } catch (error) {
                 console.error('Error loading balance:', error);
+                // Show zero instead of error
+                document.getElementById('totalBalance').textContent = formatCurrency(0);
+                document.getElementById('monthlySpent').textContent = formatCurrency(0);
             }
         }
 
         function formatCurrency(amount) {
-            if (CURRENCY === 'UZS') {
-                return `${Math.round(amount).toLocaleString('uz-UZ')} ${CURRENCY_SYMBOL}`;
+            // Make sure amount is a number
+            const numAmount = Number(amount);
+            
+            // Check if it's a valid number
+            if (isNaN(numAmount)) {
+                return `0 ${CURRENCY_SYMBOL}`;
             }
-            return `${amount.toFixed(2)}`;
+            
+            if (CURRENCY === 'UZS') {
+                // Use en-US locale for reliable number formatting
+                const formatted = Math.round(numAmount).toLocaleString('en-US');
+                return `${formatted} ${CURRENCY_SYMBOL}`;
+            }
+            
+            return `$${numAmount.toFixed(2)}`;
         }
 
         async function loadStatistics() {
