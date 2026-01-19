@@ -417,7 +417,6 @@
             <button onclick="showTab('stats')">📊 Stats</button>
         </div>
 
-        <!-- Add Expense Tab -->
         <div id="add" class="tab-content active">
             <div class="card">
                 <h2>Add New Expense</h2>
@@ -449,7 +448,6 @@
             </div>
         </div>
 
-        <!-- Expenses Tab -->
         <div id="expenses" class="tab-content">
             <div class="card">
                 <h2>Recent Expenses</h2>
@@ -457,7 +455,6 @@
             </div>
         </div>
 
-        <!-- Sources Tab -->
         <div id="sources" class="tab-content">
             <div class="card">
                 <h2>Money Sources</h2>
@@ -493,7 +490,6 @@
             </div>
         </div>
 
-        <!-- Statistics Tab -->
         <div id="stats" class="tab-content">
             <div class="card">
                 <h2>Monthly Spending</h2>
@@ -512,20 +508,17 @@
     </div>
 
     <script>
-        // Telegram Web App initialization
         const tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
         tg.enableClosingConfirmation();
 
-        // Configuration
         const API_URL = window.location.origin + '/api';
         const CURRENCY = 'UZS';
         const CURRENCY_SYMBOL = 'UZS';
         let userId = null;
         let selectedCategory = '';
 
-        // Cache system
         let dataCache = {
             sources: null,
             expenses: null,
@@ -534,7 +527,7 @@
 
         function shouldRefresh() {
             if (!dataCache.lastUpdate) return true;
-            return (Date.now() - dataCache.lastUpdate) > 60000; // 1 minute
+            return (Date.now() - dataCache.lastUpdate) > 60000;
         }
 
         function updateCache() {
@@ -950,7 +943,7 @@
         }
 
         async function deleteSource(id) {
-            if (!confirm('Delete this money source? You cannot delete sources that have expenses.')) return;
+            if (!confirm('Delete this source?')) return;
 
             try {
                 const response = await fetch(`${API_URL}/sources/${id}?telegram_id=${userId}`, {
@@ -958,6 +951,7 @@
                 });
 
                 if (response.ok) {
+                    dataCache.sources = null;
                     await loadSources();
                     await loadBalance();
                     tg.showAlert('Source deleted!');
@@ -982,12 +976,13 @@
             document.getElementById(tabName).classList.add('active');
             event.target.classList.add('active');
 
-            if (tabName === 'stats') {
+            if (tabName === 'expenses') {
+                loadExpenses();
+            } else if (tabName === 'stats') {
                 loadStatistics();
             }
         }
 
-        // Initialize app
         init();
     </script>
 </body>
