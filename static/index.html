@@ -508,6 +508,12 @@
     </div>
 
     <script>
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = String(str ?? '');
+            return div.innerHTML;
+        }
+
         const tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
@@ -663,8 +669,8 @@
                 list.innerHTML = sources.map(s => `
                     <div class="source-item">
                         <div class="source-info">
-                            <h3>${s.name}</h3>
-                            <div class="source-type">${s.type}</div>
+                            <h3>${escapeHtml(s.name)}</h3>
+                            <div class="source-type">${escapeHtml(s.type)}</div>
                             <div class="source-balance ${s.balance < 100000 ? 'low-balance' : ''}">
                                 ${formatCurrency(s.balance)}
                             </div>
@@ -707,10 +713,10 @@
                             <div class="expense-info">
                                 <div class="expense-amount">-${formatCurrency(e.amount)}</div>
                                 <div>
-                                    <span class="expense-category">${categoryIcon} ${e.category}</span>
-                                    <span class="expense-source">via ${e.source_name}</span>
+                                    <span class="expense-category">${categoryIcon} ${escapeHtml(e.category)}</span>
+                                    <span class="expense-source">via ${escapeHtml(e.source_name)}</span>
                                 </div>
-                                ${e.note ? `<div class="expense-note">${e.note}</div>` : ''}
+                                ${e.note ? `<div class="expense-note">${escapeHtml(e.note)}</div>` : ''}
                                 <div class="expense-date">${date}</div>
                             </div>
                             <button class="delete-btn" onclick="deleteExpense(${e.id})">Del</button>

@@ -347,19 +347,24 @@ def add_expense():
         return jsonify({'error': 'Insufficient balance'}), 400
     
     # Add expense
-    query = 'INSERT INTO expenses (user_id, source_id, amount, category, note) VALUES (%s, %s, %s, %s, %s) RETURNING id' if DATABASE_URL else 'INSERT INTO expenses (user_id, source_id, amount, category, note) VALUES (?, ?, ?, ?, ?)'
-    cursor.execute(query, (user_id, source_id, amount, category, note))
-    
+    if DATABASE_URL:
+        cursor.execute(
+            'INSERT INTO expenses (user_id, source_id, amount, category, note) VALUES (%s, %s, %s, %s, %s) RETURNING id',
+            (user_id, source_id, amount, category, note)
+        )
+        expense_id = cursor.fetchone()['id']
+    else:
+        cursor.execute(
+            'INSERT INTO expenses (user_id, source_id, amount, category, note) VALUES (?, ?, ?, ?, ?)',
+            (user_id, source_id, amount, category, note)
+        )
+        expense_id = cursor.lastrowid
+
     # Update source balance
     query = 'UPDATE money_sources SET balance = balance - %s WHERE id = %s' if DATABASE_URL else 'UPDATE money_sources SET balance = balance - ? WHERE id = ?'
     cursor.execute(query, (amount, source_id))
-    
+
     conn.commit()
-    
-    if DATABASE_URL:
-        expense_id = cursor.fetchone()['id']
-    else:
-        expense_id = cursor.lastrowid
     
     conn.close()
     
